@@ -1,0 +1,5 @@
+# Piano
+
+## License
+
+[MIT](./LICENSE)
