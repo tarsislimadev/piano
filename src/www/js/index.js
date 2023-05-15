@@ -3,7 +3,6 @@ import * as THREE from 'three'
 import { TextGeometry } from 'three/addons/geometries/TextGeometry.js'
 import { FontLoader } from 'three/addons/loaders/FontLoader.js'
 
-// import { Panel } from './panel.js'
 import COLORS from './colors.js'
 import FONTS from './fonts.js'
 
@@ -14,26 +13,29 @@ const _ = {
   side: THREE.DoubleSide,
 }
 
-// const panel = new Panel({ name: 'Piano' })
+const notes = {
+  'C4': 261.63,
+  'D4': 293.66,
+  'E4': 329.63,
+  'F4': 349.23,
+  'G4': 392.00,
+  'A4': 440.00,
+  'B4': 493.88,
+  'C5': 523.25,
+}
+
+const audioCtx = new AudioContext({ sampleRate: 9600 })
 
 const loader = new FontLoader()
 
 const scene = new THREE.Scene()
 
-const KEYS = {
-  C4: 'C4',
-  D4: 'D4',
-  E4: 'E4',
-  F4: 'F4',
-  G4: 'G4',
-  A4: 'A4',
-  B4: 'B4',
-  C5: 'C5',
-}
+const raycaster = new THREE.Raycaster()
+const pointer = new THREE.Vector2()
 
-const createTextGeometry = (text = 'Hello three.js!', {
-  size = 1,
-} = {}) => new Promise((res, rej) => {
+// functions
+
+const createTextGeometry = (text = '', { size = 1, } = {}) => new Promise((res, rej) => {
   loader.load(
     FONTS.HELVETIKER,
     (font) => res(new TextGeometry(text, { font, size, height: size / 2 })),
@@ -41,6 +43,61 @@ const createTextGeometry = (text = 'Hello three.js!', {
     (err) => rej(err),
   )
 })
+
+// classes
+
+class KeyNote {
+  ctx = null
+  frequency = null
+
+  constructor(frequency, { ctx = new AudioContext() } = {}) {
+    this.frequency = frequency
+    this.ctx = ctx
+  }
+
+  play(stopIn = null) {
+    if (this.osc) this.stop()
+    //
+    this.osc = this.ctx.createOscillator()
+    this.osc.type = 'square'
+    this.osc.frequency.setValueAtTime(
+      this.frequency,
+      this.ctx.currentTime,
+    )
+    //
+    this.osc.connect(this.ctx.destination)
+    this.osc.start()
+
+    if (stopIn) {
+      setTimeout(() => this.stop(), stopIn)
+    }
+  }
+
+  stop() {
+    if (this.osc) {
+      this.osc.stop()
+    }
+  }
+}
+
+// objects
+
+createTextGeometry('Piano', { size: 1 })
+  .then((geo) => {
+    const mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({
+        color: COLORS.WHITE,
+        side: _.side,
+      })
+    )
+
+    mesh.position.set(-5.0, -1.0, +0.0)
+    mesh.lookAt(camera.position)
+    mesh.position.z = +1.8
+    //
+    scene.add(mesh)
+  })
 
 const lights = [
   { color: COLORS.WHITE, type: 'AmbientLight' },
@@ -54,28 +111,33 @@ const keysTextMaterial = new THREE.MeshBasicMaterial({
   side: _.side,
 })
 
-const keys = Object.keys(KEYS).map((keyText, ix) => {
+const keys = Object.keys(notes).map((keyText, ix) => {
   const key = new THREE.Mesh(
     new THREE.BoxGeometry(+5.0, +0.1, +1.0),
     new THREE.MeshBasicMaterial({ color: COLORS.WHITE })
   )
 
   key.userData['key'] = keyText
-  key.position.z = (Object.keys(KEYS).length / +1.8) - (+1.2 * ix)
+  key.userData['keynote'] = new KeyNote(notes[keyText], { ctx: audioCtx })
+  key.position.z = (Object.keys(notes).length / +1.8) - (+1.2 * ix)
 
-  createTextGeometry(keyText, { size: +0.5 }).then((keysTextGeo) => {
-    const textMesh = new THREE.Mesh(keysTextGeo, keysTextMaterial)
+  createTextGeometry(keyText, { size: +0.5 })
+    .then((keysTextGeo) => {
+      const textMesh = new THREE.Mesh(keysTextGeo, keysTextMaterial)
 
-    textMesh.rotation.set((-Math.PI / 2), (+0.0), (+Math.PI / 2))
-    textMesh.position.set(+2.0, -0.15, +0.4)
+      textMesh.rotation.set((-Math.PI / 2), (+0.0), (+Math.PI / 2))
+      textMesh.position.set(+2.0, -0.15, +0.4)
 
-    key.add(textMesh)
-  })
+      key.add(textMesh)
+    })
+    .catch((err) => console.error(err))
 
   return key
 })
 
-keys.map((key) => scene.add(key))
+const keyGroup = new THREE.Group()
+keys.map((key) => keyGroup.add(key))
+scene.add(keyGroup)
 
 const camera = new THREE.PerspectiveCamera(75, _.getAspect())
 camera.position.set(+5.0, +5.0, +0.0)
@@ -94,36 +156,65 @@ function animate() {
 
 animate()
 
-const playKey = (keyText) => {
-  console.log({ keyText })
-
+const playNote = (keyText) => {
   const key = keys.find((k) => k.userData['key'] == keyText)
-
   if (!key) return
 
   key.material.color.set(COLORS.YELLOW)
-
-  setTimeout(() => {
-    key.material.color.set(COLORS.WHITE)
-  }, 100)
+  key.userData['keynote'].play()
 }
 
-window.addEventListener('keypress', (ev) => {
+const stopNote = (keyText) => {
+  const key = keys.find((k) => k.userData['key'] == keyText)
+  if (!key) return
+
+  key.material.color.set(COLORS.WHITE)
+  key.userData['keynote'].stop()
+}
+
+window.addEventListener('keydown', (ev) => {
   switch (ev.key) {
-    case 'a': return playKey(KEYS.C4)
-    case 's': return playKey(KEYS.D4)
-    case 'd': return playKey(KEYS.E4)
-    case 'f': return playKey(KEYS.F4)
-    case 'g': return playKey(KEYS.G4)
-    case 'h': return playKey(KEYS.A4)
-    case 'j': return playKey(KEYS.B4)
-    case 'k': return playKey(KEYS.C5)
+    case 'a': return playNote('C4')
+    case 's': return playNote('D4')
+    case 'd': return playNote('E4')
+    case 'f': return playNote('F4')
+    case 'g': return playNote('G4')
+    case 'h': return playNote('A4')
+    case 'j': return playNote('B4')
+    case 'k': return playNote('C5')
   }
 })
 
-window.onresize = function () {
+window.addEventListener('keyup', (ev) => {
+  switch (ev.key) {
+    case 'a': return stopNote('C4')
+    case 's': return stopNote('D4')
+    case 'd': return stopNote('E4')
+    case 'f': return stopNote('F4')
+    case 'g': return stopNote('G4')
+    case 'h': return stopNote('A4')
+    case 'j': return stopNote('B4')
+    case 'k': return stopNote('C5')
+  }
+})
+
+window.addEventListener('resize', () => {
   camera.aspect = _.getAspect()
   camera.updateProjectionMatrix()
   //
   renderer.setSize(_.getWidth(), _.getHeight())
-}
+})
+
+renderer.domElement.addEventListener('click', (event) => {
+  pointer.x = (event.clientX / _.getWidth()) * 2 - 1
+  pointer.y = - (event.clientY / _.getHeight()) * 2 + 1
+  raycaster.setFromCamera(pointer, camera)
+
+  const intersects = raycaster.intersectObjects(keyGroup.children)
+
+  for (let i = 0; i < intersects.length; i++) {
+    if (intersects[i].object.userData['keynote']) {
+      intersects[i].object.userData['keynote'].play(100)
+    }
+  }
+})
