@@ -24,6 +24,17 @@ const notes = {
   'C5': 523.25,
 }
 
+const keyboard = {
+  'C4': 'a',
+  'D4': 's',
+  'E4': 'd',
+  'F4': 'f',
+  'G4': 'g',
+  'A4': 'h',
+  'B4': 'j',
+  'C5': 'k',
+}
+
 const audioCtx = new AudioContext({ sampleRate: 9600 })
 
 const loader = new FontLoader()
@@ -106,10 +117,10 @@ const lights = [
 
 lights.map((light) => scene.add(light))
 
-const keysTextMaterial = new THREE.MeshBasicMaterial({
-  color: COLORS.BLACK,
-  side: _.side,
-})
+const materials = {
+  BLACK: new THREE.MeshBasicMaterial({ color: COLORS.BLACK, side: _.side, }),
+  GRAY: new THREE.MeshBasicMaterial({ color: COLORS.GRAY, side: _.side, }),
+}
 
 const keys = Object.keys(notes).map((keyText, ix) => {
   const key = new THREE.Mesh(
@@ -121,9 +132,20 @@ const keys = Object.keys(notes).map((keyText, ix) => {
   key.userData['keynote'] = new KeyNote(notes[keyText], { ctx: audioCtx })
   key.position.z = (Object.keys(notes).length / +1.8) - (+1.2 * ix)
 
+  createTextGeometry(keyboard[keyText], { size: +0.25 })
+    .then((geo) => {
+      const textMesh = new THREE.Mesh(geo, materials.GRAY)
+
+      textMesh.rotation.set((-Math.PI / 2), (+0.0), (+Math.PI / 2))
+      textMesh.position.set(+2.35, -0.05, +0.04)
+
+      key.add(textMesh)
+    })
+    .catch((err) => console.error(err))
+
   createTextGeometry(keyText, { size: +0.5 })
     .then((keysTextGeo) => {
-      const textMesh = new THREE.Mesh(keysTextGeo, keysTextMaterial)
+      const textMesh = new THREE.Mesh(keysTextGeo, materials.BLACK)
 
       textMesh.rotation.set((-Math.PI / 2), (+0.0), (+Math.PI / 2))
       textMesh.position.set(+2.0, -0.15, +0.4)
